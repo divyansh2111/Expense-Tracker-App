@@ -1,13 +1,19 @@
-import { useContext, useLayoutEffect } from "react";
+import { useContext, useLayoutEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { GlobalStyles } from "../constants/styles";
 import { ExpenseContext } from "../store/expenseContext";
 import ExpenseForm from "../components/ExpenseForm";
+import { addExpense, deleteExpense, updateExpense } from "../utils/http";
+import LoadingScreen from "./LoadingScreen";
+import ErrorScreen from "./ErrorScreen";
 
 const ManageExpenses = ({ route, navigation }) => {
   const expenseId = route.params?.id;
   const isEditing = !!expenseId;
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState();
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -17,21 +23,48 @@ const ManageExpenses = ({ route, navigation }) => {
 
   const ExpenseCtx = useContext(ExpenseContext);
 
-  const deleteHandler = () => {
-    ExpenseCtx.deleteExpense(expenseId);
-    navigation.goBack();
+  const deleteHandler = async () => {
+    try {
+      setIsLoading(true);
+      await deleteExpense(expenseId);
+      ExpenseCtx.deleteExpense(expenseId);
+      navigation.goBack();
+    } catch (error) {
+      setError("Could not delete expense. Please try again later");
+      setIsLoading(false);
+    }
   };
   const cancelHandler = () => {
     navigation.goBack();
   };
-  const submitHandler = (expenseData) => {
-    if (isEditing) {
-      ExpenseCtx.updateExpense(expenseId, expenseData);
-    } else {
-      ExpenseCtx.addExpense(expenseData);
+  const submitHandler = async (expenseData) => {
+    try {
+      setIsLoading(true);
+      if (isEditing) {
+        await updateExpense(expenseId, expenseData);
+        ExpenseCtx.updateExpense(expenseId, expenseData);
+      } else {
+        const id = await addExpense(expenseData);
+        ExpenseCtx.addExpense({ ...expenseData, id: id });
+      }
+      navigation.goBack();
+    } catch (error) {
+      setError("Could not submit request. Please try again later.");
+      setIsLoading(false);
     }
-    navigation.goBack();
   };
+
+  const errorHandler = () => {
+    setError(null);
+  };
+
+  if (!isLoading && error) {
+    return <ErrorScreen message={error} onConfirm={errorHandler} />;
+  }
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   const selectedExpense = ExpenseCtx.expenses.filter(
     (expense) => expense.id === expenseId
